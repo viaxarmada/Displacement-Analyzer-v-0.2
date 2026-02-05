@@ -707,83 +707,106 @@ with tab2:
 with tab3:
     st.markdown("## Project Results")
     
-    # Create two columns for header and button
-    col_header, col_button = st.columns([3, 1])
+    # Load Project button at top
+    col_button1, col_button2, col_button3 = st.columns([2, 1, 1])
     
-    with col_header:
-        st.markdown("### All Saved Projects")
+    with col_button2:
+        load_to_calc_btn = st.button("📂 Load to Calculator", use_container_width=True, type="primary")
     
-    with col_button:
-        load_btn = st.button("📂 Load Project", use_container_width=True, type="primary")
+    with col_button3:
+        delete_btn = st.button("🗑️ Delete Selected", use_container_width=True)
     
     if st.session_state.projects:
-        # Radio button for project selection
-        project_options = [f"{p['project_number']} - {p['project_name']}" for p in st.session_state.projects]
-        
-        selected_index = st.radio(
-            "Select a project:",
-            range(len(project_options)),
-            format_func=lambda x: project_options[x],
-            key="selected_project_radio"
-        )
-        
-        # Load project when button is clicked
-        if load_btn and selected_index is not None:
-            project = st.session_state.projects[selected_index]
-            load_project(project['project_number'])
-            st.success(f"✅ Loaded project {project['project_number']} - {project['project_name']}")
-            st.rerun()
-        
-        # Display projects table
         st.markdown("---")
         st.markdown("### Project Summary Table")
         
-        display_projects = []
-        for project in st.session_state.projects:
-            display_projects.append({
+        # Create data for table with radio button selection
+        project_data = []
+        for idx, project in enumerate(st.session_state.projects):
+            project_data.append({
+                'Select': idx,
                 'Project Number': project['project_number'],
                 'Project Name': project['project_name'],
                 'Designer': project['designer'],
-                'Description': project['description'],
-                'Date': project['date'],
-                'Last Modified': project.get('last_modified', 'N/A')
+                'Description': project['description'][:50] + '...' if len(project['description']) > 50 else project['description'],
+                'Date': project['date']
             })
         
-        st.dataframe(
-            display_projects,
-            use_container_width=True,
-            hide_index=True
-        )
+        # Radio button for selection (outside the table)
+        if 'selected_project_idx' not in st.session_state:
+            st.session_state.selected_project_idx = 0
         
-        # Delete functionality
-        st.markdown("---")
-        col_del1, col_del2 = st.columns([3, 1])
+        # Create columns for radio and table
+        col_radio, col_table = st.columns([0.5, 9.5])
         
-        with col_del2:
-            if st.button("🗑️ Delete Selected", use_container_width=True):
-                if selected_index is not None:
-                    project = st.session_state.projects[selected_index]
-                    st.session_state.projects.pop(selected_index)
-                    save_projects()
-                    st.success(f"✅ Deleted project {project['project_number']}")
-                    time.sleep(1)
-                    st.rerun()
+        with col_radio:
+            st.markdown("**Select**")
+            for idx in range(len(st.session_state.projects)):
+                if st.radio("", [idx], key=f"radio_{idx}", label_visibility="collapsed"):
+                    st.session_state.selected_project_idx = idx
+        
+        with col_table:
+            # Display project info as table
+            display_df = []
+            for project in st.session_state.projects:
+                display_df.append({
+                    'Project #': project['project_number'],
+                    'Project Name': project['project_name'],
+                    'Designer': project['designer'],
+                    'Description': project['description'][:50] + '...' if len(project['description']) > 50 else project['description'],
+                    'Date': project['date']
+                })
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+        
+        # Get selected project
+        selected_project = st.session_state.projects[st.session_state.selected_project_idx]
+        
+        # Handle Load to Calculator button
+        if load_to_calc_btn:
+            # Store values to load (don't modify widget keys directly)
+            if 'project_to_load' not in st.session_state:
+                st.session_state.project_to_load = None
+            
+            st.session_state.project_to_load = selected_project
+            st.success(f"✅ Loading project {selected_project['project_number']} - {selected_project['project_name']}")
+            
+            # Add to overview
+            if 'loaded_projects_overview' not in st.session_state:
+                st.session_state.loaded_projects_overview = []
+            
+            if not any(p['project_number'] == selected_project['project_number'] for p in st.session_state.loaded_projects_overview):
+                st.session_state.loaded_projects_overview.append(selected_project)
+            
+            # Switch to calculator tab by setting a flag
+            st.info("💡 Go to the Calculator tab to see the loaded project data")
+        
+        # Handle Delete button
+        if delete_btn:
+            st.session_state.projects.pop(st.session_state.selected_project_idx)
+            save_projects()
+            st.success(f"✅ Deleted project {selected_project['project_number']}")
+            # Reset selection
+            if st.session_state.selected_project_idx >= len(st.session_state.projects) and len(st.session_state.projects) > 0:
+                st.session_state.selected_project_idx = len(st.session_state.projects) - 1
+            time.sleep(1)
+            st.rerun()
         
         # Project Overview Section
         st.markdown("---")
         st.markdown("## Project Overview")
         st.markdown("### Detailed Project Information")
         
-        # Initialize session state for loaded projects overview
+        # Initialize overview list
         if 'loaded_projects_overview' not in st.session_state:
             st.session_state.loaded_projects_overview = []
         
-        # Add selected project to overview when Load Project is clicked
-        if load_btn and selected_index is not None:
-            project = st.session_state.projects[selected_index]
-            # Check if project is already in overview
-            if not any(p['project_number'] == project['project_number'] for p in st.session_state.loaded_projects_overview):
-                st.session_state.loaded_projects_overview.append(project)
+        # Add to overview button
+        if st.button("➕ Add Selected to Overview"):
+            if not any(p['project_number'] == selected_project['project_number'] for p in st.session_state.loaded_projects_overview):
+                st.session_state.loaded_projects_overview.append(selected_project)
+                st.success(f"Added {selected_project['project_name']} to overview")
+                st.rerun()
         
         # Display all loaded projects in overview
         if st.session_state.loaded_projects_overview:
@@ -832,7 +855,7 @@ with tab3:
                         st.rerun()
             
             # Clear all button
-            if st.button("🗑️ Clear All from Overview", use_container_width=True):
+            if st.button("🗑️ Clear All from Overview"):
                 st.session_state.loaded_projects_overview = []
                 st.rerun()
             
@@ -923,12 +946,15 @@ with tab3:
                         
                         st.markdown("---")
             else:
-                st.info("💡 No projects with box volume data in overview. Load projects with complete calculations to see comparison.")
+                st.info("💡 No projects with box volume data in overview. Add projects with complete calculations to see comparison.")
         else:
-            st.info("📋 No projects loaded in overview. Click 'Load Project' button to add projects here for detailed analysis.")
+            st.info("📋 No projects in overview. Click 'Add Selected to Overview' to analyze projects.")
     
     else:
         st.info("📋 No projects saved yet. Create a project in the Calculator tab!")
+
+# Check if we need to load project data into calculator (do this at the beginning of Calculator tab)
+# This will be handled in the Calculator tab initialization
 
 # TAB 4: Data Manager
 with tab4:
